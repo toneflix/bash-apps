@@ -27,14 +27,15 @@ Help() {
 ############################################################
 Uninstall() {
     # Add uninstall support
-    echo "⚠️  This will remove vhoster from your system. Continue? (y/N): "
+    echo "⚠️  This will remove $0 from your system. Continue? (y/N): "
     read -r CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-        echo "✅ vhoster has been uninstalled."
+        rm -- "$0"
+        echo "✅ $0 has been uninstalled."
     else
         echo "❎ Uninstall cancelled."
     fi
-    exit 0
+    exit 1
 }
 
 # Inititalize $root_dir with an empty string value
