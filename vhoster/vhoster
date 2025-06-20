@@ -21,7 +21,7 @@ Help() {
 }
 
 # Add uninstall support
-if [[ "$0" == "--uninstall" ]]; then
+if [[ "$1" == "--uninstall" ]]; then
     echo "Uninstalling vhoster..."
     rm -- "$0"
     echo "Done."
