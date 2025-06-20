@@ -20,6 +20,14 @@ Help() {
     echo "-d, --delete [hostname]           Delete a Vhost entry (Note that deleting the vhost directory will only work if it was created using the default suggested option)."
 }
 
+# Add uninstall support
+if [[ "$0" == "--uninstall" ]]; then
+    echo "Uninstalling vhoster..."
+    rm -- "$0"
+    echo "Done."
+    exit 0
+fi
+
 # Inititalize $root_dir with an empty string value
 root_dir=""
 
