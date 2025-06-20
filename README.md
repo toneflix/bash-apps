@@ -6,8 +6,8 @@ A curated collection of useful bash utilities built for system management, devel
 
 | App                                 | Description                                                                |
 | ----------------------------------- | -------------------------------------------------------------------------- |
-| [vhoster](`/vhoster`)               | Virtual host generator for local development (`/etc/hosts`, Apache/Nginx). |
-| [gh2do-firewall](`/gh2do-firewall`) | Updates DigitalOcean firewalls with GitHub Actions IP ranges (IPv4/IPv6).  |
+| [`vhoster`](/vhoster)               | Virtual host generator for local development (`/etc/hosts`, Apache/Nginx). |
+| [`gh2do-firewall`](/gh2do-firewall) | Updates DigitalOcean firewalls with GitHub Actions IP ranges (IPv4/IPv6).  |
 
 ---
 
