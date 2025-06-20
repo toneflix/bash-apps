@@ -24,7 +24,7 @@ Uninstall() {
     echo "⚠️  This will remove $0 from your system. Continue? (y/N): "
     read -r CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-        rm -- "$0"
+        sudo rm -- "./$0"
         echo "✅ $0 has been uninstalled."
     else
         echo "❎ Uninstall cancelled."
