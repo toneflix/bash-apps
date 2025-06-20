@@ -12,13 +12,13 @@ RED='\033[0;31m'
 Help() {
     # Display Help
     echo "This script helps you quickly generate vhosts along with host entries."
-    echo "Usage $0 [options] [hostname] [root_dir]"
+    echo "Usage vhoster [options] [hostname] [root_dir]"
     echo
     echo "options:"
     echo "-h, --help                        Display this help."
     echo "-c, --create                      Create a new Vhost entry."
     echo "-d, --delete [hostname]           Delete a Vhost entry (Note that deleting the vhost directory will only work if it was created using the default suggested option)."
-    echo "-x, --uninstall                   Uninstall $0."
+    echo "-x, --uninstall                   Uninstall vhoster."
     exit 1
 }
 
@@ -27,10 +27,10 @@ Help() {
 ############################################################
 Uninstall() {
     # Add uninstall support
-    echo "⚠️  This will remove $0 from your system. Continue? (y/N): "
+    echo "⚠️  This will remove vhoster from your system. Continue? (y/N): "
     read -r CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-        sudo rm -- "./$0"
+        sudo rm -- "$0"
         echo "✅ $0 has been uninstalled."
     else
         echo "❎ Uninstall cancelled."
