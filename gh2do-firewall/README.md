@@ -15,8 +15,6 @@ Part of the [`bash-apps`](https://github.com/toneflix/bash-apps) collection by [
 - ♻️ Replaces old rules to avoid duplication
 - 🔧 Create or update firewalls interactively
 
----
-
 ## ⚙️ Requirements
 
 - [`doctl`](https://docs.digitalocean.com/reference/doctl/) (DigitalOcean CLI)
@@ -29,8 +27,6 @@ You must be logged in to `doctl`:
 ```bash
 doctl auth init
 ```
-
----
 
 ## 📦 Installation
 
@@ -61,8 +57,6 @@ gh2do-firewall
 gh2do-firewall --uninstall
 ```
 
----
-
 ## 🧪 Usage
 
 ```bash
@@ -80,21 +74,15 @@ gh2do-firewall
 7. Replaces previous rules to avoid duplication
 8. Caches everything locally for next time
 
----
-
 ## 📝 Notes
 
 - Custom IPs are saved and reused by default
 - If a firewall is being updated, previous GitHub/custom port 22 rules are removed before new ones are applied
 - The script uses your `~/.config/doctl/config.yaml` for DigitalOcean auth (set via `doctl auth init`)
 
----
-
 ## 🔄 To Update
 
 Just `git pull` in the repo directory.
-
----
 
 ## 📄 License
 

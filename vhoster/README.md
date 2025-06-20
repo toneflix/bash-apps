@@ -2,6 +2,8 @@
 
 ⚙️ Quickly generate macOS-compatible Apache virtual hosts and local DNS entries.
 
+Part of the [`bash-apps`](https://github.com/toneflix/bash-apps) collection by [@toneflix](https://github.com/toneflix).
+
 ---
 
 ## 📦 Features
@@ -12,17 +14,11 @@
 - Optional deletion of both vhost and associated project folders
 - Works with default macOS Apache (`httpd`) setup
 
----
-
 ## 🚀 Installation
 
 ```bash
 curl -sL https://raw.githubusercontent.com/toneflix/bash-apps/main/vhoster/install.sh | bash
 ```
-
-> This copies the `vhoster` script to `/usr/local/bin/vhoster` and makes it executable.
-
----
 
 ## 🛠 Usage
 
@@ -48,29 +44,17 @@ You’ll be asked if you want to delete the directory too.
 vhoster --help
 ```
 
----
-
 ## 🧽 Uninstallation
 
 ```bash
 vhoster --uninstall
 ```
 
-> Or just run:
-
-```bash
-curl -sL https://raw.githubusercontent.com/toneflix/bash-apps/main/vhoster/uninstall.sh | bash
-```
-
----
-
 ## 🧠 Notes
 
 - Tested only on macOS (uses `/opt/homebrew` path).
 - Make sure Apache (`httpd`) is installed and running.
 - Always backup your `/etc/hosts` file and vhost directory.
-
----
 
 ## 📄 License
 
