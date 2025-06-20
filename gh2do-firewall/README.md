@@ -55,6 +55,12 @@ Now you can run it globally:
 gh2do-firewall
 ```
 
+## 🧽 Uninstallation
+
+```bash
+gh2do-firewall --uninstall
+```
+
 ---
 
 ## 🧪 Usage

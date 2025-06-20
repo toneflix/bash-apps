@@ -2,6 +2,42 @@
 
 set -e
 
+############################################################
+# Help                                                     #
+############################################################
+Help() {
+    # Display Help
+    echo "A smart CLI tool to automatically sync GitHub Actions IP ranges to your DigitalOcean firewall rules."
+    echo "Usage: $0"
+    echo
+    echo "options:"
+    echo "-h, --help                        Display this help."
+    echo "-x, --uninstall                   Uninstall $0."
+    exit 1
+}
+
+############################################################
+# Uninstall                                                     #
+############################################################
+Uninstall() {
+    # Add uninstall support
+    echo "⚠️  This will remove $0 from your system. Continue? (y/N): "
+    read -r CONFIRM
+    if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+        rm -- "$0"
+        echo "✅ $0 has been uninstalled."
+    else
+        echo "❎ Uninstall cancelled."
+    fi
+    exit 1
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    Help
+elif [[ "$1" == "--uninstall" || "$1" == "-x" ]]; then
+    Uninstall
+fi
+
 # 🔧 Config
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_FILE="$SCRIPT_DIR/.do_firewall_cache"

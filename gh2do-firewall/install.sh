@@ -1,10 +1,26 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
-echo "📦 Installing gh2do-firewall..."
+APP_NAME="gh2do-firewall"
+BIN_PATH="/usr/local/bin/${APP_NAME}"
+REPO_URL="https://github.com/toneflix/bash-apps"
+SCRIPT_URL="${REPO_URL}/raw/main/${APP_NAME}/${APP_NAME}.sh"
 
-curl -sL https://raw.githubusercontent.com/toneflix/bash-apps/main/gh2do-firewall/gh2do-firewall -o /usr/local/bin/gh2do-firewall
-chmod +x /usr/local/bin/gh2do-firewall
+# 💣 Remove existing binary if it exists
+if [[ -f "$BIN_PATH" ]]; then
+    echo "🧹 Removing existing $APP_NAME from $BIN_PATH..."
+    sudo rm -f "$BIN_PATH"
+fi
 
-echo "✅ Installed! Run \`gh2do-firewall\` to get started."
+# 📥 Download latest version
+echo "📦 Installing latest $APP_NAME from $REPO_URL..."
+curl -sL "$SCRIPT_URL" -o "$APP_NAME.sh"
+
+# 🧱 Make it executable and move it
+chmod +x "$APP_NAME.sh"
+sudo mv "$APP_NAME.sh" "$BIN_PATH"
+
+# ✅ Done
+echo "✅ $APP_NAME installed successfully."
+echo "🔧 Run '$APP_NAME --help' to get started."

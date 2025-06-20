@@ -18,25 +18,35 @@ Help() {
     echo "-h, --help                        Display this help."
     echo "-c, --create                      Create a new Vhost entry."
     echo "-d, --delete [hostname]           Delete a Vhost entry (Note that deleting the vhost directory will only work if it was created using the default suggested option)."
+    echo "-x, --uninstall                   Uninstall vhoster."
+    exit 1
 }
 
-# Add uninstall support
-if [[ "$1" == "--uninstall" ]]; then
-    echo "Uninstalling vhoster..."
-    rm -- "$0"
-    echo "Done."
+############################################################
+# Uninstall                                                     #
+############################################################
+Uninstall() {
+    # Add uninstall support
+    echo "⚠️  This will remove vhoster from your system. Continue? (y/N): "
+    read -r CONFIRM
+    if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "✅ vhoster has been uninstalled."
+    else
+        echo "❎ Uninstall cancelled."
+    fi
     exit 0
-fi
+}
 
 # Inititalize $root_dir with an empty string value
 root_dir=""
 
 # Loop through $parameters and restructure
-for opt in $@; do
+for opt in "$@"; do
     if [[ "$opt" == "--help" || "$opt" == "-h" ]]; then
         Help
-        help="--$opt"
-        exit 1
+        # help="--$opt"
+    elif [[ "$opt" == "--uninstall" || "$opt" == "-x" ]]; then
+        Uninstall
     elif [[ "$opt" == "--create" || "$opt" == "-c" ]]; then
         hostname=$2
         root_dir=$3
