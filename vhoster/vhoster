@@ -1,0 +1,196 @@
+#!/bin/bash
+
+# Colors
+# GREEN='\032[0;32m'
+# BLUE='\034[0;34m'
+RED='\033[0;31m'
+# NC='\033[0m' # No Color
+
+############################################################
+# Help                                                     #
+############################################################
+Help() {
+    # Display Help
+    echo "This script helps you quickly generate vhosts along with host entries."
+    echo "Usage vhoster [options] [hostname] [root_dir]"
+    echo
+    echo "options:"
+    echo "-h, --help                        Display this help."
+    echo "-c, --create                      Create a new Vhost entry."
+    echo "-d, --delete [hostname]           Delete a Vhost entry (Note that deleting the vhost directory will only work if it was created using the default suggested option)."
+}
+
+# Inititalize $root_dir with an empty string value
+root_dir=""
+
+# Loop through $parameters and restructure
+for opt in $@; do
+    if [[ "$opt" == "--help" || "$opt" == "-h" ]]; then
+        Help
+        help="--$opt"
+        exit 1
+    elif [[ "$opt" == "--create" || "$opt" == "-c" ]]; then
+        hostname=$2
+        root_dir=$3
+    elif [[ "$opt" == "--delete" || "$opt" == "-d" ]]; then
+        if [[ $2 != "" ]]; then
+            if [[ ! -f "/opt/homebrew/etc/httpd/vhosts/$2.conf" ]]; then
+                echo -e "${RED}'${2%/}' does not exist."
+                exit 1
+            fi
+            echo -n "Are you sure you want to delete \"$2\": yN "
+            read confirm
+            if [[ "$confirm" == 'y' || "$confirm" == "Y" ]]; then
+
+                # Get the path to the hosted files
+                vhost_file="/opt/homebrew/etc/httpd/vhosts/$2.conf"
+                document_root=$(grep "DocumentRoot" "$vhost_file" | awk '{print $2}' | sed 's/\/html//' | tr -d '"')
+
+                echo -n "Would you also want to delete the vhost directory \"${document_root}\": yN "
+                read confirm_dir
+
+                # Remove the files
+                if [[ "$confirm_dir" == 'y' || "$confirm_dir" == "Y" ]]; then
+                    rm -rf "${document_root}"
+                fi
+
+                # Remove vhost entry and directory
+                rm "${vhost_file}"
+
+                # Backup Host file
+                sudo cp /etc/hosts /etc/hosts.bak
+
+                # Remove the hosts entry
+                host_entry="127.0.0.1\t$2"
+                sudo sed -i -e "/$host_entry/d" /etc/hosts
+
+                echo "['$2' vhost entry deleted]"
+            else
+                echo "[Request canceled]"
+            fi
+        else
+            echo -e "${RED}A virtual host name is required to delete."
+        fi
+        exit 0
+    fi
+done
+
+_USER=$USER
+if [[ "$_USER" == 'root' ]]; then
+    echo -n "Please enter the username of your currently logged in root user: "
+    read _USER
+    if ! id -u "$_USER" >/dev/null 2>&1; then
+        echo -e "${RED}There is no such user \"$_USER\""
+        exit 1
+    fi
+else
+    echo "Loading ... "
+    # echo -e "${BLUE}This script may require root priviledges to run successfully!"
+    # echo -e "${BLUE}You may be required to login if that be the case!"
+    # exit 1
+fi
+
+if [[ $hostname == "" ]]; then
+    echo -n "Please enter the hostname: "
+    read hostname
+fi
+
+if [[ $hostname == "" ]]; then
+    echo -e "${RED}Hostname is required!"
+    exit 1
+elif [[ -f "/opt/homebrew/etc/httpd/vhosts/$hostname.conf" ]]; then
+    echo -e "${RED}'${hostname%/}' is already in use"
+    exit 1
+fi
+
+if [[ $root_dir == "" ]]; then
+    echo -n "Please enter the root_dir: \"/Users/$_USER/www/${hostname%.*}\""
+    read root_dir
+fi
+
+if [[ $root_dir == "" ]]; then
+    default=1
+    root_dir="/Users/$_USER/www/${hostname%.*}"
+fi
+
+if [[ ! -d "$root_dir" ]] && [ -z ${default+x} ]; then
+    echo "...Creating project directory at '${root_dir}'"
+    mkdir "$root_dir"
+    echo "['${root_dir}' directory created]"
+fi
+
+template="
+<VirtualHost *:80>\n
+\tDocumentRoot \"${root_dir%/}/html\"\n
+\tServerName $hostname\n
+\tErrorLog \"${root_dir%/}/logs/${hostname%.*}.local-error_log\"\n
+\tCustomLog \"${root_dir%/}/logs/${hostname%.*}.local-access_log\" common\n
+\n
+\t<Directory \"${root_dir%/}/html\">\n
+\t\tAllowOverride All\n
+\t\tRequire all granted\n
+\t</Directory>\n
+</VirtualHost>
+"
+
+# Make log and html directory
+mkdir "${root_dir%/}/logs"
+echo "['${root_dir%/}/logs' directory created]"
+
+mkdir "${root_dir%/}/html"
+echo "['${root_dir%/}/html' directory created]"
+
+# Make the user the owner of the root_dir
+chown -R $_USER $root_dir
+
+# Create an index page
+echo -e "
+<!DOCTYPE html>\n
+<html lang=\"en\">\n
+<head>\n
+\t<meta charset=\"utf-8\">\n
+\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=yes\">\n
+\t<title>Hey! $hostname works!</title>\n
+</head>\n
+<body>\n
+\t<h1>Hey! $hostname works!</h1>\n
+</body>\n
+</html>
+" >>"${root_dir%/}/html/index.html"
+echo "['${root_dir%/}/html/index.html' created]"
+
+# Path to the vhost file
+vhost_name="/opt/homebrew/etc/httpd/vhosts/$hostname.conf"
+
+# Check if the vhost file exists, then delete it
+if [ -f "$vhost_name" ]; then
+    rm "$vhost_name"
+fi
+
+# Create a new virtual host file
+echo -e $template >>"$vhost_name"
+echo "['${vhost_name}' created]"
+
+# Make the user the owner of the vhost file
+chown -R $_USER $vhost_name
+
+# Backup Host file
+sudo cp /etc/hosts /etc/hosts.bak
+echo "['/etc/hosts' backed up at '/etc/hosts.bak']"
+
+# Add a new hosts entry
+host_entry="127.0.0.1\t$hostname"
+sudo sed -i -e "/$host_entry/d" /etc/hosts
+echo -e $host_entry | sudo tee -a /etc/hosts >/dev/null
+echo "['${host_entry}' added to '/etc/hosts']"
+
+# Restart Apache2 httpd Server
+result="$(apachectl configtest 2>&1)"
+if [ "${result}" == "Syntax OK" ]; then
+    printf " ... Restarting Apache2 httpd Server \n"
+    /opt/homebrew/bin/httpd -k restart
+    echo "[Apache2 httpd Server Restarted]"
+else
+    echo "Httpd Configuration Failed. Run 'apachectl configtest' to see details"
+fi
+exit 0
