@@ -4,7 +4,7 @@ set -e
 
 APP_NAME="gh2do-firewall"
 BIN_PATH="/usr/local/bin/$APP_NAME"
-RAW_URL="https://raw.githubusercontent.com/toneflix/bash-apps/main/$APP_NAME/$APP_NAME.sh"
+RAW_URL="https://raw.githubusercontent.com/toneflix/bash-apps/main/$APP_NAME/$APP_NAME"
 
 # 🧹 Remove existing binary if it exists
 if [[ -f "$BIN_PATH" ]]; then
