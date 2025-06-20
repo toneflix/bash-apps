@@ -9,7 +9,6 @@ SCRIPT_URL="${REPO_URL}/raw/main/${APP_NAME}/${APP_NAME}.sh"
 
 # 💣 Remove existing binary if it exists
 if [[ -f "$BIN_PATH" ]]; then
-    echo "🧹 Removing existing $APP_NAME from $BIN_PATH..."
     sudo rm -f "$BIN_PATH"
 fi
 
