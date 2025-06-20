@@ -4,10 +4,10 @@ A curated collection of useful bash utilities built for system management, devel
 
 ### 📦 Available Apps
 
-| App                                            | Description                                                                |
-| ---------------------------------------------- | -------------------------------------------------------------------------- |
-| [vhoster](`./tree/main/vhoster`)               | Virtual host generator for local development (`/etc/hosts`, Apache/Nginx). |
-| [gh2do-firewall](`./tree/main/gh2do-firewall`) | Updates DigitalOcean firewalls with GitHub Actions IP ranges (IPv4/IPv6).  |
+| App                                 | Description                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| [vhoster](`/vhoster`)               | Virtual host generator for local development (`/etc/hosts`, Apache/Nginx). |
+| [gh2do-firewall](`/gh2do-firewall`) | Updates DigitalOcean firewalls with GitHub Actions IP ranges (IPv4/IPv6).  |
 
 ---
 
