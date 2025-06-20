@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+
+set -e
+
+# 🔧 Config
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_FILE="$SCRIPT_DIR/.do_firewall_cache"
+MAX_SOURCES=1000
+PROTOCOL="tcp"
+PORTS="22"
+
+# 🧾 Load last cache
+FIREWALL_ID=""
+FIREWALL_NAME=""
+DROPLET_IDS=""
+CUSTOM_SOURCES=""
+[[ -f "$CACHE_FILE" ]] && source "$CACHE_FILE"
+
+# 📋 List firewalls
+echo "📋 Available Firewalls:"
+FIREWALLS_JSON=$(doctl compute firewall list -o json)
+
+FIREWALL_IDS=()
+FIREWALL_NAMES=()
+i=0
+while IFS= read -r id && IFS= read -r name <&3; do
+    FIREWALL_IDS[i]="$id"
+    FIREWALL_NAMES[i]="$name"
+    ((i++))
+done < <(echo "$FIREWALLS_JSON" | jq -r '.[].id') 3< <(echo "$FIREWALLS_JSON" | jq -r '.[].name')
+
+DISPLAY_INDEX=1
+for i in "${!FIREWALL_IDS[@]}"; do
+    echo "$DISPLAY_INDEX. ${FIREWALL_NAMES[$i]} (${FIREWALL_IDS[$i]})"
+    ((DISPLAY_INDEX++))
+done
+
+NEW_OPTION_INDEX=$DISPLAY_INDEX
+echo "$NEW_OPTION_INDEX. ➕ Create new firewall"
+
+DEFAULT="${FIREWALL_NAME} (${FIREWALL_ID})"
+read -p "Select firewall by number (or press Enter to use cached: $DEFAULT): " FIREWALL_INDEX
+
+if [[ -n "$FIREWALL_INDEX" ]]; then
+    if [[ "$FIREWALL_INDEX" == "$NEW_OPTION_INDEX" ]]; then
+        # 🔧 Create new firewall
+        read -p "🔧 Enter name for new firewall: " FIREWALL_NAME
+        [[ -z "$FIREWALL_NAME" ]] && {
+            echo "❌ Name is required."
+            exit 1
+        }
+
+        # List droplets
+        echo "💧 Available Droplets:"
+        DROPLETS_JSON=$(doctl compute droplet list -o json)
+        DROPLET_IDS_LIST=()
+        DROPLET_NAMES_LIST=()
+        j=0
+        while IFS= read -r id && IFS= read -r name <&3; do
+            DROPLET_IDS_LIST[j]="$id"
+            DROPLET_NAMES_LIST[j]="$name"
+            echo "$((j + 1)). $name ($id)"
+            ((j++))
+        done < <(echo "$DROPLETS_JSON" | jq -r '.[].id') 3< <(echo "$DROPLETS_JSON" | jq -r '.[].name')
+
+        read -p "Select droplets by number (comma-separated, or leave blank to use cached): " SELECTED
+        if [[ -n "$SELECTED" ]]; then
+            DROPLET_IDS=""
+            IFS=',' read -ra indices <<<"$SELECTED"
+            for index in "${indices[@]}"; do
+                idx=$((index - 1))
+                DROPLET_IDS+="${DROPLET_IDS_LIST[$idx]},"
+            done
+            DROPLET_IDS="${DROPLET_IDS%,}" # Trim last comma
+        fi
+
+        [[ -z "$DROPLET_IDS" ]] && {
+            echo "❌ No droplets selected."
+            exit 1
+        }
+    else
+        idx=$((FIREWALL_INDEX - 1))
+        FIREWALL_ID="${FIREWALL_IDS[$idx]}"
+        FIREWALL_NAME="${FIREWALL_NAMES[$idx]}"
+    fi
+elif [[ -z "$FIREWALL_ID" || -z "$FIREWALL_NAME" ]]; then
+    echo "❌ No cached firewall to use."
+    exit 1
+fi
+
+# 🌐 GitHub IPs
+read -p "Include GitHub IPv6 addresses? (y/N): " INCLUDE_IPV6
+echo "🌐 Fetching GitHub Actions IP ranges..."
+GITHUB_META=$(curl -s https://api.github.com/meta)
+
+GITHUB_IPV4=($(echo "$GITHUB_META" | jq -r '.actions[]' | grep -E '^[0-9]+\..*'))
+GITHUB_IPV6=()
+[[ "$INCLUDE_IPV6" =~ ^[Yy]$ ]] && GITHUB_IPV6=($(echo "$GITHUB_META" | jq -r '.actions[]' | grep -v -E '^[0-9]+\..*'))
+
+# ➕ Custom sources
+if [[ -n "$CUSTOM_SOURCES" ]]; then
+    echo "💾 Previously saved custom sources: $CUSTOM_SOURCES"
+    read -p "Use saved custom sources? (Y/n): " USE_SAVED
+    if [[ "$USE_SAVED" =~ ^[Nn]$ ]]; then
+        CUSTOM_SOURCES=""
+    fi
+fi
+
+read -p "Add additional custom IPs (comma-separated)? (leave blank to skip): " CUSTOM_INPUT
+if [[ -n "$CUSTOM_INPUT" ]]; then
+    CUSTOM_SOURCES="$CUSTOM_INPUT"
+fi
+CUSTOM_ARRAY=()
+IFS=',' read -ra TEMP <<<"$CUSTOM_SOURCES"
+for ip in "${TEMP[@]}"; do
+    [[ -n "$ip" ]] && CUSTOM_ARRAY+=("$ip")
+done
+
+# 🔒 Confirmation
+echo ""
+echo "🛡️  Ready to apply rules:"
+echo "• Firewall: $FIREWALL_NAME"
+echo "• Firewall ID: $FIREWALL_ID"
+[[ -n "$DROPLET_IDS" ]] && echo "• Droplets: $DROPLET_IDS"
+echo "• GitHub IPs: $((${#GITHUB_IPV4[@]} + ${#GITHUB_IPV6[@]}))"
+echo "• Custom IPs: ${#CUSTOM_ARRAY[@]}"
+read -p "Proceed? (Y/n): " CONFIRM
+[[ "$CONFIRM" =~ ^[Nn]$ ]] && {
+    echo "❌ Aborted."
+    exit 0
+}
+
+# 🧹 Remove previous TCP:22 rules (GitHub and Custom)
+echo "♻️  Checking and removing matching ssh rules (port 22)..."
+
+REMOVE_RULES_ARGS=()
+
+for row in $(echo "$FIREWALLS_JSON" | jq -c '.[0].inbound_rules[] | select(.protocol == "tcp" and .ports == "22")'); do
+    ADDRESSES=$(echo "$row" | jq -r '.sources.addresses[]' | paste -sd "," -)
+    FORMATTED=$(printf "address:%s" "${ADDRESSES//,/,address:}")
+    REMOVE_RULES_ARGS+=("--inbound-rules" "protocol:tcp,ports:22,${FORMATTED}")
+done
+
+if [[ ${#REMOVE_RULES_ARGS[@]} -gt 0 ]]; then
+    echo "➖ Removing ${#REMOVE_RULES_ARGS[@]} ssh rules..."
+    OUTPUT=$(doctl compute firewall remove-rules "$FIREWALL_ID" "${REMOVE_RULES_ARGS[@]}" 2>&1) || {
+        MESSAGE=$(echo "$OUTPUT" | jq -r '.errors[0].detail // "Unknown error"' 2>/dev/null || echo "$OUTPUT")
+        echo "❌ Failed to remove previous rules: $MESSAGE"
+        exit 1
+    }
+    echo "✅ Old rules removed."
+else
+    echo "ℹ️  No matching rules found to remove."
+fi
+
+# 🧱 If creating a new firewall
+if [[ "$FIREWALL_INDEX" == "$NEW_OPTION_INDEX" ]]; then
+    echo "🚧 Creating new firewall '$FIREWALL_NAME'..."
+
+    CHUNK=("${GITHUB_IPV4[@]}" "${GITHUB_IPV6[@]}")
+    CHUNK=("${CHUNK[@]:0:$MAX_SOURCES}")
+    ADDR=$(printf ",address:%s" "${CHUNK[@]}")
+    ADDR="${ADDR:1}"
+    OUTPUT=$(doctl compute firewall create \
+        --name "$FIREWALL_NAME" \
+        --inbound-rules "protocol:$PROTOCOL,ports:$PORTS,$ADDR" \
+        --outbound-rules "protocol:tcp,ports:0,address:0.0.0.0/0" \
+        --droplet-ids "$DROPLET_IDS" -o json 2>&1) || {
+        echo "❌ Failed to create firewall: $OUTPUT"
+        exit 1
+    }
+    FIREWALL_ID=$(echo "$OUTPUT" | jq -r '.[].id')
+fi
+
+# ➕ Add GitHub IP rules in chunks
+ALL_SOURCES=("${GITHUB_IPV4[@]}" "${GITHUB_IPV6[@]}")
+UNIQUE_SOURCES=($(printf "%s\n" "${ALL_SOURCES[@]}" | sort -u))
+
+# ➕ Add custom rule separately
+if [[ ${#CUSTOM_ARRAY[@]} -gt 0 ]]; then
+    CUSTOM_ADDR=$(printf ",address:%s" "${CUSTOM_ARRAY[@]}")
+    CUSTOM_ADDR="${CUSTOM_ADDR:1}"
+    echo "➕ Adding custom rule (${#CUSTOM_ARRAY[@]} addresses)..."
+    doctl compute firewall add-rules "$FIREWALL_ID" \
+        --inbound-rules "protocol:$PROTOCOL,ports:$PORTS,$CUSTOM_ADDR" >/dev/null
+fi
+
+echo "🚀 Adding GitHub IP rules..."
+i=0
+count=1
+while [ $i -lt ${#UNIQUE_SOURCES[@]} ]; do
+    CHUNK=("${UNIQUE_SOURCES[@]:$i:$MAX_SOURCES}")
+    ADDR=$(printf ",address:%s" "${CHUNK[@]}")
+    ADDR="${ADDR:1}"
+    echo "➕ GitHub rule $count (${#CHUNK[@]} addresses)..."
+    doctl compute firewall add-rules "$FIREWALL_ID" \
+        --inbound-rules "protocol:$PROTOCOL,ports:$PORTS,$ADDR" >/dev/null
+    ((i += MAX_SOURCES))
+    ((count++))
+done
+
+# 💾 Save cache
+cat >"$CACHE_FILE" <<EOF
+FIREWALL_ID="$FIREWALL_ID"
+FIREWALL_NAME="$FIREWALL_NAME"
+DROPLET_IDS="$DROPLET_IDS"
+CUSTOM_SOURCES="$CUSTOM_SOURCES"
+EOF
+
+echo "✅ Done. Firewall '$FIREWALL_NAME' is updated and cached."
