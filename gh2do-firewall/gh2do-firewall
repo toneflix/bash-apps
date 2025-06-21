@@ -2,6 +2,13 @@
 
 set -e
 
+# 🔧 Config
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_FILE="$SCRIPT_DIR/.do_firewall_cache"
+MAX_SOURCES=1000
+PROTOCOL="tcp"
+PORTS="22"
+
 ############################################################
 # Help                                                     #
 ############################################################
@@ -25,6 +32,7 @@ Uninstall() {
     read -r CONFIRM
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
         sudo rm -- "$0"
+        sudo rm "${CACHE_FILE}"
         echo "✅ gh2do-firewall has been uninstalled."
     else
         echo "❎ Uninstall cancelled."
@@ -38,16 +46,10 @@ elif [[ "$1" == "--uninstall" || "$1" == "-x" ]]; then
     Uninstall
 fi
 
-# 🔧 Config
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE_FILE="$SCRIPT_DIR/.do_firewall_cache"
-MAX_SOURCES=1000
-PROTOCOL="tcp"
-PORTS="22"
-
 # 🧾 Load last cache
 FIREWALL_ID=""
 FIREWALL_NAME=""
+EXTEND_CUSTOM_ACCESS="false"
 DROPLET_IDS=""
 CUSTOM_SOURCES=""
 [[ -f "$CACHE_FILE" ]] && source "$CACHE_FILE"
@@ -90,11 +92,11 @@ if [[ -n "$FIREWALL_INDEX" ]]; then
         echo "💧 Available Droplets:"
         DROPLETS_JSON=$(doctl compute droplet list -o json)
         DROPLET_IDS_LIST=()
-        DROPLET_NAMES_LIST=()
+        # DROPLET_NAMES_LIST=()
         j=0
         while IFS= read -r id && IFS= read -r name <&3; do
             DROPLET_IDS_LIST[j]="$id"
-            DROPLET_NAMES_LIST[j]="$name"
+            # DROPLET_NAMES_LIST[j]="$name"
             echo "$((j + 1)). $name ($id)"
             ((j++))
         done < <(echo "$DROPLETS_JSON" | jq -r '.[].id') 3< <(echo "$DROPLETS_JSON" | jq -r '.[].name')
@@ -124,14 +126,12 @@ elif [[ -z "$FIREWALL_ID" || -z "$FIREWALL_NAME" ]]; then
     exit 1
 fi
 
-# 🌐 GitHub IPs
-read -p "Include GitHub IPv6 addresses? (y/N): " INCLUDE_IPV6
-echo "🌐 Fetching GitHub Actions IP ranges..."
-GITHUB_META=$(curl -s https://api.github.com/meta)
+CUSTOM_ARRAY=()
 
-GITHUB_IPV4=($(echo "$GITHUB_META" | jq -r '.actions[]' | grep -E '^[0-9]+\..*'))
-GITHUB_IPV6=()
-[[ "$INCLUDE_IPV6" =~ ^[Yy]$ ]] && GITHUB_IPV6=($(echo "$GITHUB_META" | jq -r '.actions[]' | grep -v -E '^[0-9]+\..*'))
+IFS=',' read -ra TEMP <<<"$CUSTOM_SOURCES"
+for ip in "${TEMP[@]}"; do
+    [[ -n "$ip" ]] && CUSTOM_ARRAY+=("$ip")
+done
 
 # ➕ Custom sources
 if [[ -n "$CUSTOM_SOURCES" ]]; then
@@ -146,11 +146,33 @@ read -p "Add additional custom IPs (comma-separated)? (leave blank to skip): " C
 if [[ -n "$CUSTOM_INPUT" ]]; then
     CUSTOM_SOURCES="$CUSTOM_INPUT"
 fi
-CUSTOM_ARRAY=()
-IFS=',' read -ra TEMP <<<"$CUSTOM_SOURCES"
-for ip in "${TEMP[@]}"; do
-    [[ -n "$ip" ]] && CUSTOM_ARRAY+=("$ip")
-done
+
+# Request Custom Access
+if [[ "$CUSTOM_SOURCES" ]]; then
+    read -p "Grant HTTP/S and MySQL access to custom sources (y/N): " REQ_CUSTOM_ACCESS
+    if [[ "$REQ_CUSTOM_ACCESS" =~ ^[Yy]$ ]]; then
+        EXTEND_CUSTOM_ACCESS="true"
+    fi
+elif [[ "$USE_SAVED" =~ ^[Nn]$ ]]; then
+    CUSTOM_SOURCES=""
+    CUSTOM_ARRAY=()
+    EXTEND_CUSTOM_ACCESS="false"
+fi
+
+# Request HTTP/S and MySQL
+if [[ "$EXTEND_CUSTOM_ACCESS" != "true" ]]; then
+    read -p "Allow all Http and Https access? (y/N): " ACCESS_WEB
+    read -p "Allow all MySQL access? (y/N): " ACCESS_SQL
+fi
+
+# 🌐 GitHub IPs
+read -p "Include GitHub IPv6 addresses? (y/N): " INCLUDE_IPV6
+echo "🌐 Fetching GitHub Actions IP ranges..."
+GITHUB_META=$(curl -s https://api.github.com/meta)
+
+GITHUB_IPV4=($(echo "$GITHUB_META" | jq -r '.actions[]' | grep -E '^[0-9]+\..*'))
+GITHUB_IPV6=()
+[[ "$INCLUDE_IPV6" =~ ^[Yy]$ ]] && GITHUB_IPV6=($(echo "$GITHUB_META" | jq -r '.actions[]' | grep -v -E '^[0-9]+\..*'))
 
 # 🔒 Confirmation
 echo ""
@@ -171,11 +193,13 @@ echo "♻️  Checking and removing matching ssh rules (port 22)..."
 
 REMOVE_RULES_ARGS=()
 
-for row in $(echo "$FIREWALLS_JSON" | jq -c '.[0].inbound_rules[] | select(.protocol == "tcp" and .ports == "22")'); do
-    ADDRESSES=$(echo "$row" | jq -r '.sources.addresses[]' | paste -sd "," -)
-    FORMATTED=$(printf "address:%s" "${ADDRESSES//,/,address:}")
-    REMOVE_RULES_ARGS+=("--inbound-rules" "protocol:tcp,ports:22,${FORMATTED}")
-done
+if [[ "$(echo "$FIREWALLS_JSON" | jq 'length')" -gt 0 ]]; then
+    for row in $(echo "$FIREWALLS_JSON" | jq -c '.[0].inbound_rules[] | select(.protocol == "tcp" and .ports == "22")'); do
+        ADDRESSES=$(echo "$row" | jq -r '.sources.addresses[]' | paste -sd "," -)
+        FORMATTED=$(printf "address:%s" "${ADDRESSES//,/,address:}")
+        REMOVE_RULES_ARGS+=("--inbound-rules" "protocol:tcp,ports:22,${FORMATTED}")
+    done
+fi
 
 if [[ ${#REMOVE_RULES_ARGS[@]} -gt 0 ]]; then
     echo "➖ Removing ${#REMOVE_RULES_ARGS[@]} ssh rules..."
@@ -219,6 +243,42 @@ if [[ ${#CUSTOM_ARRAY[@]} -gt 0 ]]; then
     echo "➕ Adding custom rule (${#CUSTOM_ARRAY[@]} addresses)..."
     doctl compute firewall add-rules "$FIREWALL_ID" \
         --inbound-rules "protocol:$PROTOCOL,ports:$PORTS,$CUSTOM_ADDR" >/dev/null
+
+    if [[ "$EXTEND_CUSTOM_ACCESS" == "true" ]]; then
+        # ➕ Add custom rule for HTTP
+        echo "➕ Adding custom rule for HTTP (${#CUSTOM_ARRAY[@]} addresses)..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:80,$CUSTOM_ADDR" >/dev/null
+
+        # ➕ Add custom rule for HTTPS
+        echo "➕ Adding custom rule for HTTPS (${#CUSTOM_ARRAY[@]} addresses)..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:443,$CUSTOM_ADDR" >/dev/null
+
+        # ➕ Add custom rule for MySQL
+        echo "➕ Adding custom rule for MySQL (${#CUSTOM_ARRAY[@]} addresses)..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:3306,$CUSTOM_ADDR" >/dev/null
+    fi
+else
+    if [[ "$ACCESS_WEB" =~ ^[Yy]$ ]]; then
+        # ➕ Add general rule for HTTP
+        echo "➕ Adding general rule for HTTP..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:80,address:0.0.0.0/0,address:::/0" >/dev/null
+
+        # ➕ Add general rule for HTTPS
+        echo "➕ Adding general rule for HTTPS..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:443,address:0.0.0.0/0,address:::/0" >/dev/null
+    fi
+
+    if [[ "$ACCESS_SQL" =~ ^[Yy]$ ]]; then
+        # ➕ Add general rule for MySQL
+        echo "➕ Adding general rule for MySQL..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:3306,address:0.0.0.0/0,address:::/0" >/dev/null
+    fi
 fi
 
 echo "🚀 Adding GitHub IP rules..."
