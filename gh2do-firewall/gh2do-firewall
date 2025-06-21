@@ -24,7 +24,7 @@ Help() {
 }
 
 ############################################################
-# Uninstall                                                     #
+# Uninstall                                                #
 ############################################################
 Uninstall() {
     # Add uninstall support
@@ -236,6 +236,30 @@ fi
 ALL_SOURCES=("${GITHUB_IPV4[@]}" "${GITHUB_IPV6[@]}")
 UNIQUE_SOURCES=($(printf "%s\n" "${ALL_SOURCES[@]}" | sort -u))
 
+############################################################
+# WebAndSqlRules                                           #
+############################################################
+WebAndSqlRules() {
+    if [[ "$ACCESS_WEB" =~ ^[Yy]$ ]]; then
+        # ➕ Add general rule for HTTP
+        echo "➕ Adding general rule for HTTP..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:80,address:0.0.0.0/0,address:::/0" >/dev/null
+
+        # ➕ Add general rule for HTTPS
+        echo "➕ Adding general rule for HTTPS..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:443,address:0.0.0.0/0,address:::/0" >/dev/null
+    fi
+
+    if [[ "$ACCESS_SQL" =~ ^[Yy]$ ]]; then
+        # ➕ Add general rule for MySQL
+        echo "➕ Adding general rule for MySQL..."
+        doctl compute firewall add-rules "$FIREWALL_ID" \
+            --inbound-rules "protocol:tcp,ports:3306,address:0.0.0.0/0,address:::/0" >/dev/null
+    fi
+}
+
 # ➕ Add custom rule separately
 if [[ ${#CUSTOM_ARRAY[@]} -gt 0 ]]; then
     CUSTOM_ADDR=$(printf ",address:%s" "${CUSTOM_ARRAY[@]}")
@@ -259,26 +283,11 @@ if [[ ${#CUSTOM_ARRAY[@]} -gt 0 ]]; then
         echo "➕ Adding custom rule for MySQL (${#CUSTOM_ARRAY[@]} addresses)..."
         doctl compute firewall add-rules "$FIREWALL_ID" \
             --inbound-rules "protocol:tcp,ports:3306,$CUSTOM_ADDR" >/dev/null
+    else
+        WebAndSqlRules
     fi
 else
-    if [[ "$ACCESS_WEB" =~ ^[Yy]$ ]]; then
-        # ➕ Add general rule for HTTP
-        echo "➕ Adding general rule for HTTP..."
-        doctl compute firewall add-rules "$FIREWALL_ID" \
-            --inbound-rules "protocol:tcp,ports:80,address:0.0.0.0/0,address:::/0" >/dev/null
-
-        # ➕ Add general rule for HTTPS
-        echo "➕ Adding general rule for HTTPS..."
-        doctl compute firewall add-rules "$FIREWALL_ID" \
-            --inbound-rules "protocol:tcp,ports:443,address:0.0.0.0/0,address:::/0" >/dev/null
-    fi
-
-    if [[ "$ACCESS_SQL" =~ ^[Yy]$ ]]; then
-        # ➕ Add general rule for MySQL
-        echo "➕ Adding general rule for MySQL..."
-        doctl compute firewall add-rules "$FIREWALL_ID" \
-            --inbound-rules "protocol:tcp,ports:3306,address:0.0.0.0/0,address:::/0" >/dev/null
-    fi
+    WebAndSqlRules
 fi
 
 echo "🚀 Adding GitHub IP rules..."
